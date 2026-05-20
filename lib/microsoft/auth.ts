@@ -43,13 +43,27 @@ export async function getAccessToken(): Promise<string> {
     params.client_secret = process.env.AZURE_CLIENT_SECRET;
   }
 
-  const res = await fetch(tokenUrl, {
+  let res = await fetch(tokenUrl, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(params),
   });
 
-  const data = await res.json();
+  let data = await res.json();
+
+  // AADSTS90023: Public clients can't send a client secret.
+  // Si ocurre este error, significa que la App en Azure se registró como cliente público,
+  // por lo que reintentamos el request omitiendo el client_secret.
+  if (!res.ok && (data.error_description?.includes("AADSTS90023") || String(data.error).includes("AADSTS90023"))) {
+    console.warn("[Auth] ⚠️ La aplicación de Azure está configurada como Cliente Público. Reintentando sin enviar client_secret...");
+    delete params.client_secret;
+    res = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params),
+    });
+    data = await res.json();
+  }
 
   if (!res.ok || !data.access_token) {
     console.error("[Auth] Error renovando token:", data.error_description || data.error);
