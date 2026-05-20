@@ -239,3 +239,129 @@ export function buildOnedrivePath(
 
   return `${basePath}/${year}/${months[month - 1]}/${folderByType[docType] ?? "Otros"}`;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Subir un archivo a OneDrive
+// ─────────────────────────────────────────────────────────────
+export async function uploadFile(
+  parentFolderId: string | null,
+  parentPath: string | null,
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType?: string
+): Promise<{ id: string; name: string; webUrl: string; downloadUrl?: string; linkCompartible?: string }> {
+  const token = await getAccessToken();
+  const driveBase = getDriveBaseUrl();
+
+  let url: string;
+  if (parentFolderId) {
+    url = `${driveBase}/items/${parentFolderId}:/${encodeURIComponent(fileName)}:/content`;
+  } else if (parentPath) {
+    let fullPath = parentPath;
+    const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || "GESTOR ONEDRIVE";
+    if (!parentPath.startsWith(rootFolder)) {
+      fullPath = `${rootFolder}/${parentPath}`;
+    }
+    url = `${driveBase}/root:/${encodeURIComponent(fullPath)}:/${encodeURIComponent(fileName)}:/content`;
+  } else {
+    throw new Error("Se requiere parentFolderId o parentPath para subir el archivo");
+  }
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": mimeType || "application/octet-stream"
+    },
+    body: new Uint8Array(fileBuffer)
+  });
+
+  const response = await res.json();
+  if (!res.ok) {
+    throw new Error(`[OneDrive] Error al subir archivo: ${response.error?.message || res.statusText}`);
+  }
+
+  // Intentar crear link compartible (anónimo, de lectura)
+  let linkCompartible: string | undefined = undefined;
+  try {
+    const shareRes = await fetch(`${driveBase}/items/${response.id}/createLink`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ type: "view", scope: "anonymous" })
+    });
+    if (shareRes.ok) {
+      const shareData = await shareRes.json();
+      linkCompartible = shareData.link?.webUrl;
+    }
+  } catch (e: any) {
+    console.warn("[OneDrive] No se pudo crear link compartible:", e.message);
+  }
+
+  return {
+    id: response.id,
+    name: response.name,
+    webUrl: response.webUrl,
+    downloadUrl: response["@microsoft.graph.downloadUrl"],
+    linkCompartible
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Obtener o crear ruta de destino basada en la fecha y tipo de factura
+// ─────────────────────────────────────────────────────────────
+export async function getOrCreateDestinationFolder(
+  clientName: string,
+  invoiceTypeName: string,
+  referenceDateStr: string
+): Promise<{ folderId: string; folderPath: string }> {
+  const refDate = referenceDateStr ? new Date(referenceDateStr) : new Date();
+  const year = refDate.getFullYear();
+  const monthIndex = refDate.getMonth();
+  const day = refDate.getDate();
+
+  const months = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  const monthName = months[monthIndex];
+  
+  // Si es menor o igual a 15, va a la carpeta de "15", sino a "30"
+  const diaStr = day <= 15 ? "15" : "30";
+
+  // Determinar subcarpeta según el tipo de factura
+  const typeLower = invoiceTypeName.toLowerCase();
+  let subfolder = "Otros";
+  if (typeLower.includes("quincena")) {
+    subfolder = "quincena";
+  } else if (typeLower.includes("impuesto")) {
+    subfolder = "impuestos";
+  }
+
+  const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || "GESTOR ONEDRIVE";
+  const clientesPath = `${rootFolder}/CLIENTES`;
+  const nameUpper = clientName.toUpperCase().trim();
+
+  // Asegurar niveles secuencialmente
+  const clientPath = `${clientesPath}/${nameUpper}`;
+  await ensureFolderExists(clientesPath, nameUpper);
+
+  const yearPath = `${clientPath}/${year}`;
+  await ensureFolderExists(clientPath, String(year));
+
+  const monthPath = `${yearPath}/${monthName}`;
+  await ensureFolderExists(yearPath, monthName);
+
+  const dayPath = `${monthPath}/${diaStr}`;
+  await ensureFolderExists(monthPath, diaStr);
+
+  const finalFolder = await ensureFolderExists(dayPath, subfolder);
+  const finalPath = `${dayPath}/${subfolder}`;
+
+  return {
+    folderId: finalFolder.id,
+    folderPath: finalPath
+  };
+}

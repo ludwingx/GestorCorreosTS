@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { sendEmail } from "@/lib/microsoft/outlook";
+import { uploadFile, getOrCreateDestinationFolder, ensureFolderExists } from "@/lib/microsoft/onedrive";
 
 export async function sendMailWithTemplate(data: {
   clientId: string;
@@ -33,8 +34,9 @@ export async function sendMailWithTemplate(data: {
 
     let fileUrl = "";
     let uploadedFileId = "";
+    let onedriveUrl = "";
 
-    // 2. Subir archivo a OB Files si se adjuntó
+    // 2. Subir archivo a OB Files y OneDrive si se adjuntó
     if (data.fileBase64 && data.fileName) {
       const OB_FILE_TOKEN = process.env.OB_FILE || "sk_f0aa1147cb619eede17fba029ec575a9941ac19d4fb85ebc";
       const uploadUrl = "https://otherbrain-tech-ob-files-oficial.ddt6vc.easypanel.host/api/upload";
@@ -64,6 +66,44 @@ export async function sendMailWithTemplate(data: {
 
       fileUrl = uploadData.url;
       uploadedFileId = uploadData.id;
+
+      // Subir también a OneDrive
+      try {
+        const fileBuffer = Buffer.from(data.fileBase64, "base64");
+        const invoiceTypeName = template.invoiceType?.name || "DOCUMENTO_VARIOS";
+        
+        // Obtener o crear ruta de destino en OneDrive basada en la fecha y tipo de factura
+        const destFolder = await getOrCreateDestinationFolder(
+          client.name,
+          invoiceTypeName,
+          data.datetime
+        );
+
+        // Subir el archivo
+        const uploadedToOnedrive = await uploadFile(
+          destFolder.folderId,
+          null,
+          fileBuffer,
+          data.fileName
+        );
+
+        onedriveUrl = uploadedToOnedrive.linkCompartible || uploadedToOnedrive.webUrl;
+
+        // Actualizar la carpeta del cliente en la BD si no estaba guardada
+        if (!client.folderId) {
+          const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || "GESTOR ONEDRIVE";
+          const clientesPath = `${rootFolder}/CLIENTES`;
+          const nameUpper = client.name.toUpperCase().trim();
+          const clientFolder = await ensureFolderExists(clientesPath, nameUpper);
+          await prisma.client.update({
+            where: { id: client.id },
+            data: { folderId: clientFolder.id }
+          });
+        }
+      } catch (oneDriveError: any) {
+        console.error("Error al subir archivo a OneDrive:", oneDriveError);
+        return { error: `Error al subir el archivo a OneDrive: ${oneDriveError.message || oneDriveError}` };
+      }
     }
 
     // 3. Compilación y reemplazo de variables dinámicas en el HTML
@@ -149,14 +189,14 @@ export async function sendMailWithTemplate(data: {
         fileName: data.fileName || "Sin archivo",
         fileType: template.invoiceType?.name || "DOCUMENTO_VARIOS",
         originalPath: fileUrl || "Sin ruta",
-        finalPath: fileUrl || "Sin ruta",
+        finalPath: onedriveUrl || fileUrl || "Sin ruta",
         status: "PROCESSED",
         clientId: client.id,
         emailHtml: emailHtml,
       }
     });
 
-    return { success: true, fileUrl };
+    return { success: true, fileUrl, onedriveUrl };
   } catch (error: any) {
     console.error("Error al procesar el envío de correo:", error);
     return { error: error.message || "Error desconocido al procesar el correo." };

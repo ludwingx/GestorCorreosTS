@@ -233,6 +233,36 @@ export function EnviarMailsClient({
     return subject;
   };
 
+  const getExpectedOnedrivePath = () => {
+    if (!selectedClientObj) return "Seleccione un cliente...";
+    
+    const clientName = selectedClientObj.name.toUpperCase().trim();
+    
+    const refDate = formData.datetime ? new Date(formData.datetime) : new Date();
+    const year = refDate.getFullYear();
+    const monthIndex = refDate.getMonth();
+    const day = refDate.getDate();
+
+    const months = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+    const monthName = months[monthIndex];
+    
+    const diaStr = day <= 15 ? "15" : "30";
+
+    const selectedInvoiceTypeObj = invoiceTypes.find(t => t.id === selectedInvoiceType);
+    const typeLower = selectedInvoiceTypeObj ? selectedInvoiceTypeObj.name.toLowerCase() : "";
+    let subfolder = "Otros";
+    if (typeLower.includes("quincena")) {
+      subfolder = "quincena";
+    } else if (typeLower.includes("impuesto")) {
+      subfolder = "impuestos";
+    }
+
+    return `GESTOR ONEDRIVE/CLIENTES/${clientName}/${year}/${monthName}/${diaStr}/${subfolder}`;
+  };
+
   const previewSubject = getPreviewSubject();
   const previewBodyHtml = getPreviewHtml();
 
@@ -331,6 +361,13 @@ export function EnviarMailsClient({
                   />
                 </div>
 
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <div className="text-right text-xs font-semibold text-muted-foreground pt-1.5">Destino OneDrive</div>
+                  <div className="col-span-3 text-xs text-blue-600 bg-blue-50 dark:bg-blue-950/20 dark:text-blue-400 p-2.5 rounded-md font-mono break-all border border-blue-100 dark:border-blue-900/30">
+                    {getExpectedOnedrivePath()}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-4 items-center gap-4 mt-2">
                   <Label htmlFor="document" className="text-right">Documento</Label>
                   <div className="col-span-3">
@@ -426,6 +463,13 @@ export function EnviarMailsClient({
                         onChange={(e) => setFormData(prev => ({ ...prev, datetime: e.target.value }))}
                         className="w-full"
                       />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground font-semibold">Destino OneDrive</Label>
+                      <div className="text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-950/20 dark:text-blue-400 p-2 rounded font-mono break-all border border-blue-100 dark:border-blue-900/30">
+                        {getExpectedOnedrivePath()}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
