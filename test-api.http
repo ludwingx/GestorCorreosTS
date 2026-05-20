@@ -1,0 +1,51 @@
+### ============================================================================
+### PRUEBAS DE API - INTEGRACIÓN MICROSOFT
+### Asegúrate de que el servidor esté corriendo: npm run dev (http://localhost:3000)
+### ============================================================================
+
+### 1️⃣ Crear carpeta INBOX en la raíz de OneDrive
+POST http://localhost:3000/api/onedrive/folders
+Content-Type: application/json
+
+{
+  "parentPath": "",
+  "folderName": "GESTOR ONEDRIVE"
+}
+
+###
+
+### 2️⃣ Crear subcarpeta CLIENTES
+POST http://localhost:3000/api/onedrive/folders
+Content-Type: application/json
+
+{
+  "parentPath": "GESTOR ONEDRIVE",
+  "folderName": "CLIENTES"
+}
+
+###
+
+### 3️⃣ Listar archivos en la raíz
+GET http://localhost:3000/api/onedrive/files
+
+###
+
+### 4️⃣ Listar archivos dentro de GESTOR ONEDRIVE
+GET http://localhost:3000/api/onedrive/files?path=GESTOR ONEDRIVE
+
+###
+
+### 5️⃣ Enviar un correo de prueba (Cambia el "to" por tu gmail)
+POST http://localhost:3000/api/outlook/send
+Content-Type: application/json
+
+{
+  "to": "reymondaf650@gmail.com",
+  "subject": "Prueba desde mi API en Next.js",
+  "html": "<h1 style='color:blue'>¡Hola!</h1><p>Si recibes esto, la API de Outlook funciona perfecto.</p>"
+}
+
+###
+### NOTA PARA SUBIR ARCHIVOS (POST /api/onedrive/files) o MOVER (PATCH):
+### Es más fácil probar la subida de archivos usando un script de Node o Postman,
+### ya que requiere enviar un FormData con el archivo físico.
