@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
+import { crearEstructuraCliente } from '@/lib/microsoft/onedrive';
 
 export async function getClients() {
   const session = await auth();
@@ -25,11 +26,22 @@ export async function createClient(data: { name: string; email: string }) {
   if (!session) throw new Error('No autorizado');
 
   try {
+    const nameUpper = data.name.toUpperCase().trim();
+    let folderId: string | null = null;
+
+    try {
+      const resOneDrive = await crearEstructuraCliente(nameUpper);
+      folderId = resOneDrive.rootFolderId;
+    } catch (oneDriveError: any) {
+      console.error('[createClient] Error creating folders in OneDrive:', oneDriveError);
+      return { error: `Error al crear carpetas en OneDrive: ${oneDriveError.message || 'Verifica la conexión'}` };
+    }
+
     const client = await prisma.client.create({
       data: {
         name: data.name,
         email: data.email,
-        folderId: null, // Will be populated by Graph API logic later
+        folderId,
       }
     });
 
@@ -39,7 +51,7 @@ export async function createClient(data: { name: string; email: string }) {
     if (error.code === 'P2002') {
       return { error: 'Ya existe un cliente con ese nombre' };
     }
-    return { error: 'Error al crear el cliente' };
+    return { error: 'Error al crear el cliente en la base de datos' };
   }
 }
 

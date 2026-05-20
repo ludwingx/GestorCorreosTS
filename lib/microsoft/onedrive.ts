@@ -46,24 +46,65 @@ export async function listFolderContents(folderPath: string): Promise<DriveItem[
 }
 
 // ─────────────────────────────────────────────────────────────
+// Resolver ID de carpeta desde ruta o ID
+// ─────────────────────────────────────────────────────────────
+
+export async function resolveFolderId(pathOrId: string): Promise<string> {
+  const token = await getAccessToken();
+  const driveBase = getDriveBaseUrl();
+
+  const parts = pathOrId.split("/");
+  const firstPart = parts[0];
+  const relativePath = parts.slice(1).join("/");
+
+  const isFirstPartId =
+    !firstPart.includes("/") &&
+    firstPart !== "CLIENTES" &&
+    firstPart !== "GESTOR ONEDRIVE";
+
+  let url: string;
+  if (isFirstPartId) {
+    if (relativePath) {
+      url = `${driveBase}/items/${firstPart}:/${encodeURIComponent(relativePath)}?$select=id`;
+    } else {
+      return firstPart; // Ya es el ID directo
+    }
+  } else {
+    url = `${driveBase}/root:/${encodeURIComponent(pathOrId)}?$select=id`;
+  }
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(
+      `[OneDrive] No se pudo resolver la carpeta ${pathOrId}: ${data.error?.message}`
+    );
+  }
+  return data.id;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Crear carpeta si no existe
 // ─────────────────────────────────────────────────────────────
 
 export async function ensureFolderExists(
-  parentPath: string,
+  parentPathOrId: string,
   folderName: string
 ): Promise<DriveItem> {
   const token = await getAccessToken();
   const driveBase = getDriveBaseUrl();
 
-  // Intentar obtener la carpeta
-  const getUrl = `${driveBase}/root:/${encodeURIComponent(parentPath + "/" + folderName)}`;
+  // 1. Resolver el ID de la carpeta padre
+  const parentId = await resolveFolderId(parentPathOrId);
+
+  // 2. Intentar obtener la carpeta hija
+  const getUrl = `${driveBase}/items/${parentId}:/${encodeURIComponent(folderName)}`;
   const getRes = await fetch(getUrl, { headers: { Authorization: `Bearer ${token}` } });
 
   if (getRes.ok) return getRes.json();
 
-  // No existe → crearla
-  const createUrl = `${driveBase}/root:/${encodeURIComponent(parentPath)}:/children`;
+  // 3. No existe → crearla bajo el parentId
+  const createUrl = `${driveBase}/items/${parentId}/children`;
   const createRes = await fetch(createUrl, {
     method:  "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -84,30 +125,24 @@ export async function ensureFolderExists(
 // ─────────────────────────────────────────────────────────────
 
 export async function moveFile(
-  fileId:            string,
-  destinationPath:   string,
-  newFileName:       string
+  fileId:              string,
+  destinationPathOrId: string,
+  newFileName:         string
 ): Promise<DriveItem> {
   const token = await getAccessToken();
   const driveBase = getDriveBaseUrl();
 
-  // Obtener ID de la carpeta destino
-  const folderRes  = await fetch(
-    `${driveBase}/root:/${encodeURIComponent(destinationPath)}?$select=id`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  const folderData = await folderRes.json();
+  // 1. Resolver el ID de la carpeta destino
+  const destinationFolderId = await resolveFolderId(destinationPathOrId);
 
-  if (!folderRes.ok) throw new Error("[OneDrive] Carpeta destino no encontrada: " + folderData.error?.message);
-
-  // Mover el archivo
+  // 2. Mover el archivo
   const moveRes  = await fetch(
     `${driveBase}/items/${fileId}`,
     {
       method:  "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body:    JSON.stringify({
-        parentReference: { id: folderData.id },
+        parentReference: { id: destinationFolderId },
         name:            newFileName,
       }),
     }
@@ -116,6 +151,68 @@ export async function moveFile(
 
   if (!moveRes.ok) throw new Error("[OneDrive] Error moviendo archivo: " + moved.error?.message);
   return moved;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Crear estructura completa del cliente (CLIENTES/NOMBRE/AÑO/MES/DIA/quincena e impuestos)
+// ─────────────────────────────────────────────────────────────
+
+function obtenerMesActual(): string {
+  const meses = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  return meses[new Date().getMonth()];
+}
+
+export async function crearEstructuraCliente(
+  nombreCliente: string,
+  anio: number | null = null,
+  mes: string | null = null,
+  dias: number[] = [15, 30]
+): Promise<{ rootFolderId: string; rootFolderUrl: string; carpetasCreadas: any[] }> {
+  const carpetasCreadas: any[] = [];
+
+  async function crear(nombre: string, parentPath: string) {
+    const resultado = await ensureFolderExists(parentPath, nombre);
+    const ruta = `${parentPath}/${nombre}`;
+    carpetasCreadas.push({ ruta, id: resultado.id, webUrl: resultado.webUrl });
+    console.log(`[OneDrive] ✅ Carpeta creada/asegurada: ${ruta}`);
+    return resultado;
+  }
+
+  const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || "GESTOR ONEDRIVE";
+  const parentFolder = `${rootFolder}/CLIENTES`;
+  const nameUpper = nombreCliente.toUpperCase().trim();
+
+  // Nivel 1: GESTOR ONEDRIVE/CLIENTES/CLIENTE
+  const resCliente = await crear(nameUpper, parentFolder);
+  const rutaCliente = `${parentFolder}/${nameUpper}`;
+
+  // Nivel 2: AÑO
+  const anioStr = String(anio ?? new Date().getFullYear());
+  await crear(anioStr, rutaCliente);
+  const rutaAnio = `${rutaCliente}/${anioStr}`;
+
+  // Nivel 3: MES
+  const mesStr = mes ?? obtenerMesActual();
+  await crear(mesStr, rutaAnio);
+  const rutaMes = `${rutaAnio}/${mesStr}`;
+
+  // Nivel 4: DÍA + quincena e impuestos
+  for (const dia of dias) {
+    const diaStr = String(dia);
+    await crear(diaStr, rutaMes);
+    const rutaDia = `${rutaMes}/${diaStr}`;
+    await crear("quincena", rutaDia);
+    await crear("impuestos", rutaDia);
+  }
+
+  return {
+    rootFolderId: resCliente.id,
+    rootFolderUrl: resCliente.webUrl,
+    carpetasCreadas
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
