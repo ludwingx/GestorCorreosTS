@@ -22,11 +22,13 @@ async function InvoiceTypesData() {
 
 export default function TiposFacturaPage() {
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-2">Tipos de Factura</h2>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Tipos de Factura
+          </h1>
+          <p className="text-zinc-500 text-xs md:text-sm mt-1">
             Gestiona las categorías de facturas para agrupar tus templates y automatizar envíos.
           </p>
         </div>
@@ -41,7 +43,7 @@ export default function TiposFacturaPage() {
 
 function InvoiceTypesSkeleton() {
   return (
-    <div className="grid gap-6 md:grid-cols-3 items-start mt-4">
+    <div className="grid gap-6 md:grid-cols-3 items-start">
       {/* Left panel skeleton (form) */}
       <div className="rounded-xl border bg-card p-6 space-y-4">
         <Skeleton className="h-5 w-1/3" />

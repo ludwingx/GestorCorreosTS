@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { getTemplates } from "@/actions/templates";
@@ -16,37 +15,27 @@ async function TemplatesData() {
 
 export default function TemplatesPage() {
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight mb-2">Templates</h2>
-          <p className="text-muted-foreground">
-            Diseña y administra las plantillas de correo electrónico para tus notificaciones automáticas.
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Plantillas de Correo
+          </h1>
+          <p className="text-zinc-500 text-xs md:text-sm mt-1">
+            Diseña y administra las plantillas HTML de correo electrónico para tus notificaciones automáticas.
           </p>
         </div>
         
         <Link href="/templates/builder/new">
-          <Button>
-            <Plus className="mr-2 size-4" /> Nuevo Template
+          <Button className="rounded-xl shadow-sm hover:scale-[1.02] transition-all font-semibold">
+            <Plus className="mr-2 size-4" /> Nueva Plantilla
           </Button>
         </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="col-span-full border-muted bg-card shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle>Plantillas Registradas</CardTitle>
-            <CardDescription>
-              Templates disponibles para asignación a tipos de factura y envíos.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<TemplatesSkeleton />}>
-              <TemplatesData />
-            </Suspense>
-          </CardContent>
-        </Card>
-      </div>
+      <Suspense fallback={<TemplatesSkeleton />}>
+        <TemplatesData />
+      </Suspense>
     </div>
   );
 }

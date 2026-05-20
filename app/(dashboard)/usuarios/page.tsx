@@ -25,27 +25,22 @@ export default async function UsuariosPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestión de Usuarios</h1>
-          <p className="text-muted-foreground">
-            Administra los accesos y roles del sistema.
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Gestión de Usuarios
+          </h1>
+          <p className="text-zinc-500 text-xs md:text-sm mt-1">
+            Administra los accesos, roles y permisos de los operadores del sistema.
           </p>
         </div>
         <CreateUserDialog />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuarios Registrados</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<UsersSkeleton />}>
-            <UsersData currentUserId={session.user.id!} />
-          </Suspense>
-        </CardContent>
-      </Card>
+      <Suspense fallback={<UsersSkeleton />}>
+        <UsersData currentUserId={session.user.id!} />
+      </Suspense>
     </div>
   );
 }
