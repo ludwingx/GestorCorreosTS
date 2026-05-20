@@ -24,6 +24,55 @@ function getDriveBaseUrl(): string {
 }
 
 // ─────────────────────────────────────────────────────────────
+// HELPERS PARA RUTAS Y FECHAS
+// ─────────────────────────────────────────────────────────────
+
+export interface ParsedDate {
+  year: number;
+  monthIndex: number;
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+export function parseLocalDate(dateStr?: string | null): ParsedDate {
+  if (!dateStr) {
+    const d = new Date();
+    return {
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      day: d.getDate(),
+      hour: d.getHours(),
+      minute: d.getMinutes()
+    };
+  }
+
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (match) {
+    return {
+      year: parseInt(match[1], 10),
+      monthIndex: parseInt(match[2], 10) - 1, // 0-based
+      day: parseInt(match[3], 10),
+      hour: match[4] ? parseInt(match[4], 10) : 0,
+      minute: match[5] ? parseInt(match[5], 10) : 0
+    };
+  }
+
+  const d = new Date(dateStr);
+  return {
+    year: d.getFullYear(),
+    monthIndex: d.getMonth(),
+    day: d.getDate(),
+    hour: d.getHours(),
+    minute: d.getMinutes()
+  };
+}
+
+export function encodeOnedrivePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
+// ─────────────────────────────────────────────────────────────
 // Listar archivos en una carpeta del INBOX
 // ─────────────────────────────────────────────────────────────
 
@@ -31,7 +80,7 @@ export async function listFolderContents(folderPath: string): Promise<DriveItem[
   const token = await getAccessToken();
   const driveBase = getDriveBaseUrl();
 
-  const url = `${driveBase}/root:/${encodeURIComponent(folderPath)}:/children` +
+  const url = `${driveBase}/root:/${encodeOnedrivePath(folderPath)}:/children` +
               `?$select=id,name,size,webUrl,lastModifiedDateTime,file,folder`;
 
   const res  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -65,12 +114,12 @@ export async function resolveFolderId(pathOrId: string): Promise<string> {
   let url: string;
   if (isFirstPartId) {
     if (relativePath) {
-      url = `${driveBase}/items/${firstPart}:/${encodeURIComponent(relativePath)}?$select=id`;
+      url = `${driveBase}/items/${firstPart}:/${encodeOnedrivePath(relativePath)}?$select=id`;
     } else {
       return firstPart; // Ya es el ID directo
     }
   } else {
-    url = `${driveBase}/root:/${encodeURIComponent(pathOrId)}?$select=id`;
+    url = `${driveBase}/root:/${encodeOnedrivePath(pathOrId)}?$select=id`;
   }
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -262,7 +311,7 @@ export async function uploadFile(
     if (!parentPath.startsWith(rootFolder)) {
       fullPath = `${rootFolder}/${parentPath}`;
     }
-    url = `${driveBase}/root:/${encodeURIComponent(fullPath)}:/${encodeURIComponent(fileName)}:/content`;
+    url = `${driveBase}/root:/${encodeOnedrivePath(fullPath)}:/${encodeURIComponent(fileName)}:/content`;
   } else {
     throw new Error("Se requiere parentFolderId o parentPath para subir el archivo");
   }
@@ -317,10 +366,7 @@ export async function getOrCreateDestinationFolder(
   invoiceTypeName: string,
   referenceDateStr: string
 ): Promise<{ folderId: string; folderPath: string }> {
-  const refDate = referenceDateStr ? new Date(referenceDateStr) : new Date();
-  const year = refDate.getFullYear();
-  const monthIndex = refDate.getMonth();
-  const day = refDate.getDate();
+  const { year, monthIndex, day } = parseLocalDate(referenceDateStr);
 
   const months = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",

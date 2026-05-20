@@ -2,7 +2,18 @@
 
 import prisma from "@/lib/prisma";
 import { sendEmail } from "@/lib/microsoft/outlook";
-import { uploadFile, getOrCreateDestinationFolder, ensureFolderExists } from "@/lib/microsoft/onedrive";
+import { uploadFile, getOrCreateDestinationFolder, ensureFolderExists, parseLocalDate } from "@/lib/microsoft/onedrive";
+
+function formatSpanishDate(parsed: { year: number; monthIndex: number; day: number; hour: number; minute: number }): string {
+  const months = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+  ];
+  const monthName = months[parsed.monthIndex] || "enero";
+  const hourStr = String(parsed.hour).padStart(2, "0");
+  const minuteStr = String(parsed.minute).padStart(2, "0");
+  return `${parsed.day} de ${monthName} de ${parsed.year}, ${hourStr}:${minuteStr}`;
+}
 
 export async function sendMailWithTemplate(data: {
   clientId: string;
@@ -110,14 +121,8 @@ export async function sendMailWithTemplate(data: {
     let emailHtml = template.html || "";
     
     // Obtener la fecha de referencia formateada
-    const refDate = data.datetime ? new Date(data.datetime) : new Date();
-    const formattedDate = refDate.toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    const parsedDate = parseLocalDate(data.datetime);
+    const formattedDate = formatSpanishDate(parsedDate);
 
     // Compañía por defecto
     const companyName = "Burger King S.R.L.";
@@ -235,14 +240,8 @@ export async function resendFailedDocument(documentId: string) {
     if (!doc.client.email) return { error: "El cliente asociado no tiene correo electrónico." };
 
     // Construir un HTML limpio para el reenvío
-    const refDate = new Date(doc.processedAt);
-    const formattedDate = refDate.toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    const parsedDate = parseLocalDate(doc.processedAt.toISOString());
+    const formattedDate = formatSpanishDate(parsedDate);
 
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
