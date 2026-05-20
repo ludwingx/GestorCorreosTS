@@ -6,6 +6,53 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 
+export function getDirectImageUrl(url: string): string {
+  if (!url) return "";
+  
+  try {
+    let cleanUrl = url.trim();
+
+    // 1. Google Drive
+    if (cleanUrl.includes("drive.google.com")) {
+      const fileIdMatch = cleanUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || cleanUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (fileIdMatch && fileIdMatch[1]) {
+        return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
+      }
+    }
+
+    // 2. OneDrive Personal
+    if (cleanUrl.includes("onedrive.live.com") && cleanUrl.includes("redir")) {
+      return cleanUrl.replace("redir?", "download?");
+    }
+    if (cleanUrl.includes("1drv.ms/i/s!")) {
+      return cleanUrl.replace("/i/s!", "/u/s!") + (cleanUrl.includes("?") ? "&" : "?") + "download=1";
+    }
+
+    // 3. OneDrive Business / SharePoint
+    if (cleanUrl.includes(".sharepoint.com") && (cleanUrl.includes("/:i:/") || cleanUrl.includes("/:u:/"))) {
+      let converted = cleanUrl.replace(/\/:[iu]:\//, '/:b:/');
+      if (!converted.includes("download=1") && !converted.includes("raw=1")) {
+        converted += (converted.includes("?") ? "&" : "?") + "download=1";
+      }
+      return converted;
+    }
+
+    // 4. Dropbox
+    if (cleanUrl.includes("dropbox.com")) {
+      if (cleanUrl.includes("dl=0")) {
+        return cleanUrl.replace("dl=0", "raw=1");
+      }
+      if (!cleanUrl.includes("raw=1")) {
+        return cleanUrl + (cleanUrl.includes("?") ? "&" : "?") + "raw=1";
+      }
+    }
+
+    return cleanUrl;
+  } catch (e) {
+    return url;
+  }
+}
+
 export function CenterPanel() {
   const { blocks, selectedBlockId, selectBlock, removeBlock, previewMode } = useBuilderStore();
   
@@ -24,7 +71,7 @@ export function CenterPanel() {
     <div 
       ref={setNodeRef}
       className={cn(
-        "bg-white text-black shadow-xl min-h-[600px] transition-all relative pb-20 border-2 w-full max-w-[600px]",
+        "bg-white text-black shadow-xl min-h-[600px] h-fit shrink-0 transition-all relative pb-20 border-2 w-full max-w-[600px]",
         isOver ? "border-primary bg-blue-50/50" : "border-transparent"
       )}
       onClick={() => selectBlock(null)}
@@ -35,7 +82,7 @@ export function CenterPanel() {
           <p className="text-sm mt-2">Arrastra los componentes desde el panel izquierdo hacia aquí.</p>
         </div>
       ) : (
-        <div className="flex flex-col min-h-full p-4 gap-2">
+        <div className="flex flex-col h-auto p-4 gap-2">
           {rootBlocks.map((block) => (
             <BlockRenderer 
               key={block.id} 
@@ -106,7 +153,7 @@ function BlockRenderer({ block, allBlocks, isSelected, onSelect, onRemove }: { b
         {block.type === 'image' && (
           <div style={{ textAlign: block.styles.textAlign || 'center', width: '100%' }}>
             {block.content.url ? (
-               <img src={block.content.url} alt={block.content.alt} className="max-w-full h-auto" style={block.styles} />
+               <img src={getDirectImageUrl(block.content.url)} alt={block.content.alt} className="max-w-full h-auto" style={block.styles} />
             ) : (
               <div className="w-full h-32 bg-muted flex items-center justify-center text-muted-foreground border-2 border-dashed">
                 [Imagen]
@@ -119,7 +166,7 @@ function BlockRenderer({ block, allBlocks, isSelected, onSelect, onRemove }: { b
         {block.type === 'html' && <div dangerouslySetInnerHTML={{ __html: block.content }} style={{width: '100%'}} />}
         {block.type === 'header' && (
           <div className="flex items-center justify-between" style={block.styles}>
-            {block.content.logoUrl ? <img src={block.content.logoUrl} alt="Logo" className="max-h-12" /> : <div className="font-bold text-xl">LOGO</div>}
+            {block.content.logoUrl ? <img src={getDirectImageUrl(block.content.logoUrl)} alt="Logo" className="max-h-12" /> : <div className="font-bold text-xl">LOGO</div>}
             <div className="text-sm font-medium">{block.content.text}</div>
           </div>
         )}
@@ -188,11 +235,11 @@ function CodePreview({ blocks }: { blocks: EmailBlock[] }) {
       if (block.type === 'title') content = `<h1 style="${styles}">${block.content}</h1>`;
       else if (block.type === 'text') content = `<p style="${styles}">${block.content}</p>`;
       else if (block.type === 'button') content = `<div style="text-align: ${block.styles.textAlign || 'center'};"><a href="${block.content.url}" style="display:inline-block; padding:10px 20px; background-color:#000; color:#fff; text-decoration:none; border-radius:5px; ${styles}">${block.content.text}</a></div>`;
-      else if (block.type === 'image') content = `<div style="text-align: ${block.styles.textAlign || 'center'};"><img src="${block.content.url}" alt="${block.content.alt}" style="max-width:100%; ${styles}" /></div>`;
+      else if (block.type === 'image') content = `<div style="text-align: ${block.styles.textAlign || 'center'};"><img src="${getDirectImageUrl(block.content.url)}" alt="${block.content.alt}" style="max-width:100%; ${styles}" /></div>`;
       else if (block.type === 'divider') content = `<hr style="${styles}" />`;
       else if (block.type === 'spacer') content = `<div style="height: ${block.styles.height || '20px'}; ${styles}"></div>`;
       else if (block.type === 'html') content = `<div style="${styles}">${block.content}</div>`;
-      else if (block.type === 'header') content = `<table width="100%" style="${styles}"><tr><td>${block.content.logoUrl ? `<img src="${block.content.logoUrl}" height="40" />` : `<strong>LOGO</strong>`}</td><td align="right">${block.content.text}</td></tr></table>`;
+      else if (block.type === 'header') content = `<table width="100%" style="${styles}"><tr><td>${block.content.logoUrl ? `<img src="${getDirectImageUrl(block.content.logoUrl)}" height="40" />` : `<strong>LOGO</strong>`}</td><td align="right">${block.content.text}</td></tr></table>`;
       else if (block.type === 'footer') content = `<div style="${styles}">${block.content}</div>`;
       else if (block.type === 'social') content = `<div style="text-align:center; padding: 10px; ${styles}"><a href="${block.content.facebook}" style="margin: 0 10px;">FB</a><a href="${block.content.twitter}" style="margin: 0 10px;">TW</a><a href="${block.content.linkedin}" style="margin: 0 10px;">IN</a></div>`;
       else if (block.type === 'columns') {
